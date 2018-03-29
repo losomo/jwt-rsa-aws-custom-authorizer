@@ -39,7 +39,6 @@ node_modules
 .node_repl_history
 
 # project files that contain sensitive data
-.env
 event.json
 policyDocument.json
 *.zip
