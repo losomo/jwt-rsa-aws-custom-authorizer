@@ -3,6 +3,7 @@
 require('dotenv').config({ silent: true });
 var jwksClient = require('jwks-rsa');
 var jwt = require('jsonwebtoken');
+var public_urns_re = new RegExp('^arn:aws:execute-api:us-east-1:967417580898:\\w+/prod/\\w+/api/(ballots|results)/');
 
 var getPolicyDocument = function (effect, resource) {
 
@@ -40,6 +41,17 @@ var getToken = function (params) {
 
 module.exports.authenticate = function (params, cb) {
     console.log(params);
+
+    if (public_urns_re.test(params.methodArn)) {
+        cb(null, {
+            principalId: "",
+            policyDocument: getPolicyDocument('Allow', params.methodArn),
+            context: {
+                scope: ""
+            }
+        });
+    }
+
     var token = getToken(params);
 
     var client = jwksClient({
