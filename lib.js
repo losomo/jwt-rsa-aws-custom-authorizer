@@ -3,7 +3,7 @@
 require('dotenv').config({ silent: true });
 var jwksClient = require('jwks-rsa');
 var jwt = require('jsonwebtoken');
-var public_urns_re = new RegExp('^arn:aws:execute-api:us-east-1:967417580898:\\w+/prod/\\w+/api/(ballots|results)/');
+var public_urns_re = new RegExp('^arn:aws:execute-api:us-east-1:967417580898:\\w+/prod/\\w+/api/(ballots|results|setups)/');
 
 var getPolicyDocument = function (effect, resource) {
 
@@ -39,10 +39,9 @@ var getToken = function (params) {
     return match[1];
 }
 
-module.exports.authenticate = function (params, cb) {
-    console.log(params);
-
-    if (public_urns_re.test(params.methodArn)) {
+var err_cb = function (err, params, cb) {
+    let allow_empty = public_urns_re.test(params.methodArn);
+    if (allow_empty) {
         cb(null, {
             principalId: "",
             policyDocument: getPolicyDocument('Allow', params.methodArn),
@@ -50,7 +49,13 @@ module.exports.authenticate = function (params, cb) {
                 scope: ""
             }
         });
+    } else {
+        cb(err);
     }
+}
+
+module.exports.authenticate = function (params, cb) {
+    console.log(params);
 
     var token = getToken(params);
 
@@ -66,37 +71,27 @@ module.exports.authenticate = function (params, cb) {
         var kid = decoded.header.kid;
     }
     catch (err) {
-        cb(err);
+        err_cb(err, params, cb);
     }
     client.getSigningKey(kid, function (err, key) {
-        if(err)
-        {
-             cb(err);
-        }
-        else
-        {
-        var signingKey = key.publicKey || key.rsaPublicKey;
-        jwt.verify(token, signingKey, { audience: process.env.AUDIENCE, issuer: process.env.TOKEN_ISSUER },
-            function (err, decoded) {
-                if (err) {
-                    cb(err);
-
-                }
-                else {
-
-                    cb(null, {
-                        principalId: decoded.sub,
-                        policyDocument: getPolicyDocument('Allow', params.methodArn),
-                        context: {
-                            scope: decoded.scope
-                        }
-                    });
-                }
+        if(err) {
+            err_cb(err, params, cb);
+        } else {
+            var signingKey = key.publicKey || key.rsaPublicKey;
+            jwt.verify(token, signingKey, { audience: process.env.AUDIENCE, issuer: process.env.TOKEN_ISSUER },
+                function (err, decoded) {
+                    if (err) {
+                        err_cb(err, params, cb);
+                    } else {
+                        cb(null, {
+                            principalId: decoded.sub,
+                            policyDocument: getPolicyDocument('Allow', params.methodArn),
+                            context: {
+                                scope: decoded.scope
+                            }
+                        });
+                    }
             });
-    }
-
+        }
     });
-
-
-
 }
