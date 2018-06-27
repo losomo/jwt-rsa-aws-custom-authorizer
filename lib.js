@@ -42,6 +42,7 @@ var getToken = function (params) {
 var err_cb = function (err, params, cb) {
     let allow_empty = public_urns_re.test(params.methodArn);
     if (allow_empty) {
+        console.log("Allowing anonymous access to " + params.methodArn);
         cb(null, {
             principalId: "",
             policyDocument: getPolicyDocument('Allow', params.methodArn),
@@ -50,14 +51,17 @@ var err_cb = function (err, params, cb) {
             }
         });
     } else {
+        console.error(err);
         cb(err);
     }
 }
 
 module.exports.authenticate = function (params, cb) {
-    console.log(params);
-
     var token = getToken(params);
+    if (token == "Anonymous") {
+        err_cb("Anonymous access", params, cb);
+        return;
+    }
 
     var client = jwksClient({
         cache: true,
@@ -72,6 +76,7 @@ module.exports.authenticate = function (params, cb) {
     }
     catch (err) {
         err_cb(err, params, cb);
+        return;
     }
     client.getSigningKey(kid, function (err, key) {
         if(err) {
@@ -83,6 +88,7 @@ module.exports.authenticate = function (params, cb) {
                     if (err) {
                         err_cb(err, params, cb);
                     } else {
+                        console.log("Allowing " + decoded.sub + " to " + params.methodArn);
                         cb(null, {
                             principalId: decoded.sub,
                             policyDocument: getPolicyDocument('Allow', params.methodArn),
